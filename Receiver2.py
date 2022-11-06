@@ -12,14 +12,17 @@ file = open(fileName, "wb")
 EOF = 0
 sequenceNum = -1
 print("The receiver is ready to recieve")
+# loops until end of file is received
 while EOF==0:
+    
     message, senderAddress = receiverSocket.recvfrom(1027)
     receiverSocket.sendto(message[0:2], senderAddress)
 
-    #In case same packet is sent from sender due to ACK packet being dropped
+    # Checks if previously acknowledged packet was resent
     if (sequenceNum == int.from_bytes(message[0:2], 'little')):
         continue
     
+    # writes to file
     sequenceNum = int.from_bytes(message[0:2], 'little')
     EOF = message[2]
     data = message[3:]

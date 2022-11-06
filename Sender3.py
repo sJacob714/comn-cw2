@@ -12,6 +12,7 @@ file = open(fileName, 'rb')
 senderSocket = socket(AF_INET, SOCK_DGRAM)
 senderSocket.settimeout(retryTimeOut/1000)
 
+# Reads file, stores in packets of 1024 bytes chunks, adds header to each packet
 sequenceNum = 0
 packetList = []
 while (len(file.peek())>0):
@@ -22,47 +23,54 @@ while (len(file.peek())>0):
         EOF = 255
     packetList.append( (sequenceNum.to_bytes(2, 'little')  + EOF.to_bytes(1, 'little') + fileBytes) )
     sequenceNum+=1
-packetList.reverse()
 
+# Used for stats
 start = time.time()
 retransmissions = 0
-lastAcknowledged = [-1,-1]
 
-while (len(packetList)>0):
+windowBase = 0
+# Loops until windowBase has reached end of packetList
+while (windowBase < len(packetList)):
 
-    for numSent in range(min(windowSize,len(packetList))):
-        senderSocket.sendto(packetList[-numSent-1], (receiverName, receiverPort))
-        #print("sent ", packetList[-numSent-1][0:3])
-    numSent+=1
+    # Sends all packets in the window
+    for numSent in range( min(windowSize, (len(packetList)-windowBase)) ):
+        senderSocket.sendto(packetList[windowBase + numSent], (receiverName, receiverPort))
+        retransmissions+=1
 
-    packetsAcknowledged = 0
+    packetsAcknowledged = 0     #Tracks number of sent packets acknowledged
     reSendPackets = False
-    while (not reSendPackets) and (packetsAcknowledged<numSent):
-
+    # loops until told to resend, or all sent packets are acknowledged
+    while (not reSendPackets) and (packetsAcknowledged < min(windowSize, (len(packetList)-windowBase))):
         try:
             ack, receiverAddress = senderSocket.recvfrom(2)
-
-            if (int.from_bytes(ack, 'little') < int.from_bytes(packetList[-1][0:2],'little')):
-                #print("RECEIVED PREVIOUS ACKNOWLEDGEMENT ", lastAcknowledged[0:2])
-                retransmissions+=1
-                continue
-
-            #print("Ack for ", ack)
-            while ack!=packetList[-1][0:2]:
-                packetList.pop()
-                packetsAcknowledged+=1
-            lastAcknowledged = packetList.pop()
-            packetsAcknowledged+=1
-
+        
+        # resends packets if socket times out
         except:
-            #print("TIMED OUT")
-            retransmissions+=1
             reSendPackets = True
+            continue
+        
+        # Ignores ack for packet before current window
+        if (int.from_bytes(ack, 'little') < int.from_bytes(packetList[windowBase][0:2],'little')):
+            continue
 
+        # Shifts window forward until base is at newest acknowledged packet
+        while ack!=packetList[windowBase][0:2]:
+            windowBase+=1
+            packetsAcknowledged+=1
+        # Shifts window once more to get to oldest unacknowledged packet
+        windowBase+=1
+        packetsAcknowledged+=1
+
+#ACTUAL OUTPUT
+size = (sequenceNum-1)*1024+len(fileBytes)
+print( (size/(time.time()-start))/1000 )
+
+#TODO: STATS DELETE THIS
 print()
 print("time taken: ", time.time()-start)
 print("number of packets ", sequenceNum)
-print("number of retransmissions ", retransmissions)
+print("number of retransmissions ", retransmissions-sequenceNum)
+print("Thorougput: ", size/(time.time()-start))
 
 
 file.close()
