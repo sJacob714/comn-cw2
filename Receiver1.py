@@ -2,37 +2,26 @@ from cmath import inf
 from socket import *
 import sys
 
-receiverPort = int(sys.argv[1])
-fileName = str(sys.argv[2])
+def main(receiverPort, fileName):
 
-receiverSocket = socket(AF_INET, SOCK_DGRAM)
-receiverSocket.bind(('', receiverPort))
-file = open(fileName, "wb")
+    receiverSocket = socket(AF_INET, SOCK_DGRAM)
+    receiverSocket.bind(('', receiverPort))
+    file = open(fileName, "wb")
 
-maxNumOfPackets = inf       # number of packets to be received, initialised as inf until end of file packet is received
-messageList = []
-print("The receiver is ready to recieve")
+    #print("The receiver is ready to recieve")
+    EOF = 0
+    # loops until end of file is received
+    while (EOF==0):
+        message, senderAddress = receiverSocket.recvfrom(1027)
+        EOF = message[2]
+        data = message[3:]
+        file.write(data)
 
-# due to packet delay, packets could be received in wrong order
-# loops until all packets are received
-while (len(messageList) != maxNumOfPackets):
-    message, senderAddress = receiverSocket.recvfrom(1027)
+    receiverSocket.close()
+    file.close()
 
-    sequenceNum = int.from_bytes(message[0:2], 'little')
-    EOF = message[2]
-    data = message[3:]
+if __name__ == "__main__":
+    receiverPort = int(sys.argv[1])
+    fileName = str(sys.argv[2])
 
-    #stores data and sequence number so list can be sorted at end
-    messageList.append([sequenceNum, data])
-
-    # sequence number of end of file packet will tell us the size of the packets
-    if (EOF == 255):
-        maxNumOfPackets = sequenceNum+1
-
-# orders list based on sequence number, then writes all data to file
-fileBytes = [item[1] for item in sorted(messageList, key = lambda x: x[0])]
-for byte in fileBytes:
-    file.write(byte)
-
-receiverSocket.close()
-file.close()
+    main(receiverPort, fileName)
